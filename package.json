@@ -1,0 +1,37 @@
+{
+  "name": "vibex-sdk",
+  "version": "0.1.0",
+  "description": "vibex.sh Node.js SDK - Fail-safe logging handler for vibex.sh",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "vibex",
+    "logging",
+    "monitoring",
+    "analytics",
+    "winston"
+  ],
+  "author": "vibex.sh",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vibex-sh/vibex-node"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "winston": "^3.11.0"
+  },
+  "peerDependencies": {
+    "winston": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "winston": {
+      "optional": false
+    }
+  }
+}
