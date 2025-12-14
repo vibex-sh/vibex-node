@@ -25,10 +25,64 @@ class VibexClient {
         this._printStatus(`⚠️  Vibex SDK disabled: Missing configuration: ${missing.join(', ')}`);
       }
     } else {
+      this._printStartupInfo();
       if (this.verbose) {
         this._printStatus('✅ Vibex SDK enabled and ready');
       }
     }
+  }
+
+  /**
+   * Mask token for display (show first 6 chars, mask the rest)
+   * @param {string} token - Token to mask
+   * @returns {string} Masked token
+   */
+  _maskToken(token) {
+    if (!token || token.length <= 6) {
+      return '******';
+    }
+    return `${token.substring(0, 6)}${'*'.repeat(token.length - 6)}`;
+  }
+
+  /**
+   * Print elegant startup information about vibex.sh
+   */
+  _printStartupInfo() {
+    const maskedToken = this._maskToken(this.config.token);
+    // Box width is 61 chars, "║  Server:  " is 11 chars, " ║" is 2 chars
+    // So content width = 61 - 11 - 2 = 48 chars
+    const contentWidth = 48;
+    const server = this._padString(this.config.apiUrl, contentWidth);
+    const session = this._padString(this.config.sessionId, contentWidth);
+    const token = this._padString(maskedToken, contentWidth);
+    
+    const lines = [
+      '',
+      '                    vibex.sh is in action                      ',
+      '═══════════════════════════════════════════════════════════════',
+      `  Server:  ${server}`,
+      `  Session: ${session}`,
+      `  Token:   ${token}`,
+      '═══════════════════════════════════════════════════════════════',
+      ''
+    ];
+    
+    console.error(lines.join('\n'));
+    this._initializationMessageShown = true;
+  }
+
+  /**
+   * Pad string to specified length for formatting
+   * @param {string} str - String to pad
+   * @param {number} length - Target length
+   * @returns {string} Padded string
+   */
+  _padString(str, length) {
+    if (!str) return ' '.repeat(length);
+    if (str.length > length) {
+      return str.substring(0, length);
+    }
+    return str + ' '.repeat(length - str.length);
   }
 
   /**
