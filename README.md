@@ -57,7 +57,34 @@ The SDK is designed to be fail-safe:
 1. **Missing Config**: If `VIBEX_TOKEN` or `VIBEX_SESSION_ID` is missing, the handler silently disables itself
 2. **Invalid Token**: On 401/403 responses, the handler permanently disables for the process lifetime
 3. **Network Errors**: All network errors are silently handled - your application continues normally
-4. **Rate Limits**: On 429 (rate limit), logs are dropped but the handler remains enabled
+4. **Rate Limits**: On 429 (rate limit), logs are dropped but the handler remains enabled. Logs are still written to console by default (`passthroughConsole: true`)
+
+## Console Passthrough Options
+
+By default, logs are forwarded to Vibex and also written to `stderr` (console), ensuring you can always see your logs locally while they're sent to Vibex.
+
+### `passthroughConsole` (default: `true`)
+
+When enabled (default), logs are always written to `stderr` in addition to being sent to Vibex. This provides visibility into your logs while forwarding them to Vibex.
+
+```javascript
+// Default behavior - logs written to console and sent to Vibex
+const handler = new VibexHandler(); // passthroughConsole: true by default
+
+// To disable console output (logs only sent to Vibex)
+const handler = new VibexHandler({ passthroughConsole: false });
+```
+
+### `passthroughOnFailure` (default: `false`)
+
+When enabled, logs are written to `stderr` when sending to Vibex fails (rate limits, network errors, etc.). This is useful as an additional safety net, but with `passthroughConsole: true` by default, it's typically not needed.
+
+```javascript
+// Write logs to console only when sending fails
+const handler = new VibexHandler({ passthroughConsole: false, passthroughOnFailure: true });
+```
+
+**Important:** Non-JSON logs are still discarded (only JSON-formatted logs are processed).
 
 ## Important: JSON-Only Logging
 
@@ -115,6 +142,14 @@ console.log(status);
 //   sessionId: 'my-product...',
 //   tokenPrefix: 'vb_live_y...'
 // }
+```
+
+### Verbose Mode
+
+Enable verbose mode to see status messages when the handler initializes or encounters errors:
+
+```javascript
+const handler = new VibexHandler({ verbose: true });
 ```
 
 ## Node.js Version Compatibility

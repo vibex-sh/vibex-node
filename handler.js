@@ -13,12 +13,16 @@ class VibexHandler extends winston.Transport {
    * @param {object} options - Configuration options
    * @param {VibexConfig} options.config - Optional VibexConfig instance. If null, loads from environment.
    * @param {boolean} options.verbose - If true, print status messages to stderr when handler is initialized or errors occur.
+   * @param {boolean} options.passthroughConsole - If true, always write logs to stderr in addition to sending to Vibex (default: true).
+   * @param {boolean} options.passthroughOnFailure - If true, write logs to stderr when sending to Vibex fails (default: false).
    */
   constructor(options = {}) {
     super(options);
 
-    const { config = null, verbose = false } = options;
+    const { config = null, verbose = false, passthroughConsole = true, passthroughOnFailure = false } = options;
     this.client = new VibexClient(config, verbose);
+    this.passthroughConsole = passthroughConsole;
+    this.passthroughOnFailure = passthroughOnFailure;
   }
 
   /**
@@ -26,15 +30,10 @@ class VibexHandler extends winston.Transport {
    * @param {object} info - Log info object from winston
    * @param {Function} callback - Callback function
    */
-  log(info, callback) {
+  async log(info, callback) {
     setImmediate(() => {
       this.emit('logged', info);
     });
-
-    if (!this.client.isEnabled()) {
-      callback();
-      return;
-    }
 
     try {
       // Get the actual message content
@@ -54,11 +53,43 @@ class VibexHandler extends winston.Transport {
             payload.exc_info = error.stack || error.message || String(error);
           }
 
-          // Send as JSON log
-          const timestamp = info.timestamp ? new Date(info.timestamp).getTime() : Date.now();
-          this.client.sendLog('json', payload, timestamp).catch(() => {
-            // Silently handle errors
-          });
+          // Track whether we should write to console
+          let shouldWriteToConsole = this.passthroughConsole;
+          let sendSucceeded = false;
+
+          // Try to send to Vibex if enabled
+          if (this.client.isEnabled()) {
+            const timestamp = info.timestamp ? new Date(info.timestamp).getTime() : Date.now();
+            try {
+              sendSucceeded = await this.client.sendLog('json', payload, timestamp);
+              // If passthroughOnFailure is enabled and sending failed, write to console
+              if (this.passthroughOnFailure && !sendSucceeded) {
+                shouldWriteToConsole = true;
+              }
+            } catch (error) {
+              // If passthroughOnFailure is enabled and sending errored, write to console
+              if (this.passthroughOnFailure) {
+                shouldWriteToConsole = true;
+              }
+            }
+          } else if (this.passthroughOnFailure) {
+            // Client is disabled, treat as failure
+            shouldWriteToConsole = true;
+          }
+
+          // Write to console if needed
+          if (shouldWriteToConsole) {
+            try {
+              // Format payload with timestamp for console output
+              const consoleOutput = {
+                timestamp: info.timestamp ? new Date(info.timestamp).getTime() : Date.now(),
+                ...payload
+              };
+              console.error(JSON.stringify(consoleOutput));
+            } catch (error) {
+              // Fail-safe: silently ignore console write errors
+            }
+          }
         }
         // If parsed is not an object (string, number, etc.), discard it
       } catch (parseError) {
