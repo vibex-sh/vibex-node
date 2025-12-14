@@ -15,6 +15,16 @@ Fail-safe logging handler for sending logs to [vibex.sh](https://vibex.sh).
 npm install vibex-sdk winston
 ```
 
+## Authentication
+
+Before using the SDK, you need to get your authentication token. Run this command in your terminal:
+
+```bash
+npx vibex-sh login
+```
+
+This will generate your `VIBEX_TOKEN` that you'll use in the environment variables below.
+
 ## Quick Start
 
 1. Set environment variables:
