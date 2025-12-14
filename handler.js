@@ -85,7 +85,8 @@ class VibexHandler extends winston.Transport {
                 timestamp: info.timestamp ? new Date(info.timestamp).getTime() : Date.now(),
                 ...payload
               };
-              console.error(JSON.stringify(consoleOutput));
+              // Pretty-print JSON for elegant console output
+              console.error(JSON.stringify(consoleOutput, null, 2));
             } catch (error) {
               // Fail-safe: silently ignore console write errors
             }
