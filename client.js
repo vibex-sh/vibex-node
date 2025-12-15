@@ -153,48 +153,79 @@ class VibexClient {
           };
 
           const req = client.request(options, (res) => {
-            // Handle 403/401 - permanently disable
-            if (res.statusCode === 401 || res.statusCode === 403) {
-              const errorMsg = '🚫 Vibex SDK permanently disabled: Token expired or invalid (401/403)';
-              if (this.verbose) {
-                this._printStatus(errorMsg);
+            let responseData = '';
+            
+            // Collect response data
+            res.on('data', (chunk) => {
+              responseData += chunk;
+            });
+            
+            res.on('end', () => {
+              // Handle 403/401 - permanently disable
+              if (res.statusCode === 401 || res.statusCode === 403) {
+                const errorMsg = '🚫 Vibex SDK permanently disabled: Token expired or invalid (401/403)';
+                if (this.verbose) {
+                  this._printStatus(errorMsg);
+                }
+                this.disabledPermanently = true;
+                resolve(false);
+                return;
               }
-              this.disabledPermanently = true;
-              resolve(false);
-              return;
-            }
 
-            // Handle 429 - rate limit exceeded
-            if (res.statusCode === 429) {
-              const errorMsg = '⚠️  Vibex SDK: Rate limit exceeded, dropping log';
-              if (this.verbose) {
-                this._printStatus(errorMsg);
+              // Handle 429 - rate limit exceeded or history limit reached
+              if (res.statusCode === 429) {
+                // Try to parse error message from response
+                let errorMessage = 'Rate limit exceeded';
+                let isHistoryLimit = false;
+                
+                try {
+                  const errorData = JSON.parse(responseData);
+                  errorMessage = errorData.message || errorData.error || errorMessage;
+                  isHistoryLimit = errorData.error === 'History Limit Reached' || 
+                                  (errorMessage && errorMessage.toLowerCase().includes('history limit'));
+                } catch (e) {
+                  // If parsing fails, use default message
+                }
+                
+                const errorMsg = isHistoryLimit 
+                  ? `🚫 Vibex SDK: ${errorMessage}`
+                  : `⚠️  Vibex SDK: ${errorMessage}`;
+                
+                if (this.verbose) {
+                  this._printStatus(errorMsg);
+                }
+                
+                // Permanently disable if history limit is reached (no point retrying)
+                if (isHistoryLimit) {
+                  this.disabledPermanently = true;
+                }
+                
+                resolve(false);
+                return;
               }
-              resolve(false);
-              return;
-            }
 
-            // Handle 404 - session not found
-            if (res.statusCode === 404) {
-              const errorMsg = '⚠️  Vibex SDK: Session not found (404), dropping log';
-              if (this.verbose) {
-                this._printStatus(errorMsg);
+              // Handle 404 - session not found
+              if (res.statusCode === 404) {
+                const errorMsg = '⚠️  Vibex SDK: Session not found (404), dropping log';
+                if (this.verbose) {
+                  this._printStatus(errorMsg);
+                }
+                resolve(false);
+                return;
               }
-              resolve(false);
-              return;
-            }
 
-            // Handle other errors
-            if (res.statusCode < 200 || res.statusCode >= 300) {
-              const errorMsg = `⚠️  Vibex SDK: Failed to send log: ${res.statusCode}`;
-              if (this.verbose) {
-                this._printStatus(errorMsg);
+              // Handle other errors
+              if (res.statusCode < 200 || res.statusCode >= 300) {
+                const errorMsg = `⚠️  Vibex SDK: Failed to send log: ${res.statusCode}`;
+                if (this.verbose) {
+                  this._printStatus(errorMsg);
+                }
+                resolve(false);
+                return;
               }
-              resolve(false);
-              return;
-            }
 
-            resolve(true);
+              resolve(true);
+            });
           });
 
           req.on('error', () => {
@@ -239,12 +270,34 @@ class VibexClient {
         return false;
       }
 
-      // Handle 429 - rate limit exceeded
+      // Handle 429 - rate limit exceeded or history limit reached
       if (response.status === 429) {
-        const errorMsg = '⚠️  Vibex SDK: Rate limit exceeded, dropping log';
+        // Try to parse error message from response
+        let errorMessage = 'Rate limit exceeded';
+        let isHistoryLimit = false;
+        
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+          isHistoryLimit = errorData.error === 'History Limit Reached' || 
+                          (errorMessage && errorMessage.toLowerCase().includes('history limit'));
+        } catch (e) {
+          // If parsing fails, use default message
+        }
+        
+        const errorMsg = isHistoryLimit 
+          ? `🚫 Vibex SDK: ${errorMessage}`
+          : `⚠️  Vibex SDK: ${errorMessage}`;
+        
         if (this.verbose) {
           this._printStatus(errorMsg);
         }
+        
+        // Permanently disable if history limit is reached (no point retrying)
+        if (isHistoryLimit) {
+          this.disabledPermanently = true;
+        }
+        
         return false;
       }
 
