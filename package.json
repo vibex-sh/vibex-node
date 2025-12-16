@@ -1,6 +1,6 @@
 {
   "name": "vibex-sdk",
-  "version": "0.1.2",
+  "version": "0.9.0",
   "description": "vibex.sh Node.js SDK - Fail-safe logging handler for vibex.sh",
   "main": "index.js",
   "type": "commonjs",
