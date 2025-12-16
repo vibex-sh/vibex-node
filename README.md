@@ -58,7 +58,6 @@ The SDK reads configuration from environment variables:
 
 - `VIBEX_TOKEN` (required): Your Vibex API token
 - `VIBEX_SESSION_ID` (required): Your session ID
-- `VIBEX_API_URL` (optional): API endpoint (default: `https://vibex.sh/api/v1/ingest`)
 
 ## Fail-Safe Behavior
 
