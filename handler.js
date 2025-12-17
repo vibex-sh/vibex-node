@@ -1,11 +1,13 @@
 /**
  * Vibex Logging Handler
  * Winston Transport implementation for Vibex
+ * Phase 1.7: Updated to support hybrid JSON structure and text logs
  */
 
 const winston = require('winston');
 const VibexClient = require('./client');
 const VibexConfig = require('./config');
+const { normalizeToHybrid, normalizeLevel } = require('./normalize');
 
 class VibexHandler extends winston.Transport {
   /**
@@ -27,6 +29,7 @@ class VibexHandler extends winston.Transport {
 
   /**
    * Log method called by winston
+   * Phase 1.7: Always constructs hybrid JSON structure, supports text logs
    * @param {object} info - Log info object from winston
    * @param {Function} callback - Callback function
    */
@@ -39,62 +42,102 @@ class VibexHandler extends winston.Transport {
       // Get the actual message content
       const message = info.message || info[Symbol.for('message')] || String(info);
 
-      // Try to parse message as JSON - if it's JSON, use it directly as payload
-      // Discard non-JSON logs entirely (only send structured JSON data)
+      // Extract level from info
+      const level = normalizeLevel(info.level);
+
+      // Get extra fields from info (exclude standard winston fields)
+      const standardFields = new Set([
+        'level', 'message', 'timestamp', 'splat', 'label', 'ms', 'error', 'err',
+        Symbol.for('message'), Symbol.for('level'), Symbol.for('splat')
+      ]);
+      const extra = {};
+      for (const [key, value] of Object.entries(info)) {
+        if (!standardFields.has(key) && typeof key !== 'symbol') {
+          extra[key] = value;
+        }
+      }
+
+      // Try to parse message as JSON
+      let payload = null;
+      let isTextLog = false;
+
       try {
         const parsed = JSON.parse(message);
         if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-          // Message is a JSON object - use it as the payload directly
-          const payload = { ...parsed };
+          // Message is a JSON object - use it as payload
+          payload = parsed;
+        } else {
+          // Parsed but not an object - treat as text
+          isTextLog = true;
+        }
+      } catch (parseError) {
+        // Message is not JSON - treat as text log
+        isTextLog = true;
+      }
 
-          // Add exception info if present
-          if (info.error || info.err) {
-            const error = info.error || info.err;
-            payload.exc_info = error.stack || error.message || String(error);
-          }
+      // Normalize to hybrid structure
+      let hybrid;
+      if (isTextLog) {
+        // Text log: send message as-is, level from logger
+        hybrid = {
+          message: message, // Text content
+          level: level,
+          metrics: {},
+          context: {},
+        };
+      } else {
+        // JSON log: normalize to hybrid structure
+        hybrid = normalizeToHybrid(
+          message,
+          level,
+          payload || {},
+          extra
+        );
+      }
 
-          // Track whether we should write to console
-          let shouldWriteToConsole = this.passthroughConsole;
-          let sendSucceeded = false;
+      // Add exception info if present
+      if (info.error || info.err) {
+        const error = info.error || info.err;
+        hybrid.exc_info = error.stack || error.message || String(error);
+      }
 
-          // Try to send to Vibex if enabled
-          if (this.client.isEnabled()) {
-            const timestamp = info.timestamp ? new Date(info.timestamp).getTime() : Date.now();
-            try {
-              sendSucceeded = await this.client.sendLog('json', payload, timestamp);
-              // If passthroughOnFailure is enabled and sending failed, write to console
-              if (this.passthroughOnFailure && !sendSucceeded) {
-                shouldWriteToConsole = true;
-              }
-            } catch (error) {
-              // If passthroughOnFailure is enabled and sending errored, write to console
-              if (this.passthroughOnFailure) {
-                shouldWriteToConsole = true;
-              }
-            }
-          } else if (this.passthroughOnFailure) {
-            // Client is disabled, treat as failure
+      // Track whether we should write to console
+      let shouldWriteToConsole = this.passthroughConsole;
+      let sendSucceeded = false;
+
+      // Try to send to Vibex if enabled
+      if (this.client.isEnabled()) {
+        const timestamp = info.timestamp ? new Date(info.timestamp).getTime() : Date.now();
+        try {
+          sendSucceeded = await this.client.sendLog('json', hybrid, timestamp);
+          // If passthroughOnFailure is enabled and sending failed, write to console
+          if (this.passthroughOnFailure && !sendSucceeded) {
             shouldWriteToConsole = true;
           }
-
-          // Write to console if needed
-          if (shouldWriteToConsole) {
-            try {
-              // Format payload with timestamp for console output
-              const consoleOutput = {
-                timestamp: info.timestamp ? new Date(info.timestamp).getTime() : Date.now(),
-                ...payload
-              };
-              // Pretty-print JSON for elegant console output
-              console.error(JSON.stringify(consoleOutput, null, 2));
-            } catch (error) {
-              // Fail-safe: silently ignore console write errors
-            }
+        } catch (error) {
+          // If passthroughOnFailure is enabled and sending errored, write to console
+          if (this.passthroughOnFailure) {
+            shouldWriteToConsole = true;
           }
         }
-        // If parsed is not an object (string, number, etc.), discard it
-      } catch (parseError) {
-        // Message is not JSON - discard it completely
+      } else if (this.passthroughOnFailure) {
+        // Client is disabled, treat as failure
+        shouldWriteToConsole = true;
+      }
+
+      // Write to console if needed
+      if (shouldWriteToConsole) {
+        try {
+          // Format payload with timestamp for console output
+          const consoleOutput = {
+            timestamp: info.timestamp ? new Date(info.timestamp).getTime() : Date.now(),
+            ...hybrid
+          };
+          // Pretty-print JSON for elegant console output
+          console.error(JSON.stringify(consoleOutput, null, 2));
+        } catch (error) {
+          // Fail-safe: silently ignore console write errors
+        }
       }
     } catch (error) {
       // Fail-safe: silently ignore all errors

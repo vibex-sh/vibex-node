@@ -24,6 +24,7 @@ class VibexConfig {
       this.apiUrl = `${workerUrl.replace(/\/$/, '')}/api/v1/ingest`;
     } else {
       // Production default - use Worker URL (not web URL)
+      // For local development, set VIBEX_WORKER_URL=http://localhost:8787
       this.apiUrl = 'https://ingest.vibex.sh/api/v1/ingest';
     }
   }
